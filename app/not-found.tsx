@@ -17,7 +17,7 @@ const NotFound = () => {
           moved.
         </p>
         <Button asChild className="w-full sm:w-auto">
-          <Link href="/">← Go Back Home</Link>
+          <Link href="/">Go Back Home</Link>
         </Button>
       </div>
     </div>
