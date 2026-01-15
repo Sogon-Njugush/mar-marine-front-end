@@ -43,29 +43,29 @@ export const columns: ColumnDef<DailyStat>[] = [
     accessorKey: "date",
     header: ({ column }) => {
       return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Date
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Date
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
       );
     },
     cell: ({ row }) => (
-      <div className="font-medium whitespace-nowrap">
+      <div className="text-center font-medium whitespace-nowrap">
         {row.getValue("date")}
       </div>
     ),
   },
   {
     accessorKey: "machineName",
-    header: "Machine Name",
+    header: () => <div className="text-center">Machine Name</div>,
     cell: ({ row }) => (
-      <div
-        className="max-w-[150px] truncate"
-        title={row.getValue("machineName")}
-      >
+      // Removed fixed width truncation to allow dynamic resizing
+      <div className="text-center min-w-[120px]">
         {row.getValue("machineName")}
       </div>
     ),
@@ -73,7 +73,7 @@ export const columns: ColumnDef<DailyStat>[] = [
   {
     accessorKey: "engineHoursSeconds",
     header: ({ column }) => (
-      <div className="text-right">
+      <div className="flex justify-center">
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
@@ -86,17 +86,19 @@ export const columns: ColumnDef<DailyStat>[] = [
     cell: ({ row }) => {
       const val = row.getValue("engineHoursSeconds") as number;
       return (
-        <div className="text-right font-mono">{formatSecondsToTime(val)}</div>
+        <div className="text-center font-mono whitespace-nowrap">
+          {formatSecondsToTime(val)}
+        </div>
       );
     },
   },
   {
     accessorKey: "idleTimeSeconds",
-    header: () => <div className="text-right">Idle Time</div>,
+    header: () => <div className="text-center">Idle Time</div>,
     cell: ({ row }) => {
       const val = row.getValue("idleTimeSeconds") as number;
       return (
-        <div className="text-right font-mono text-yellow-600 dark:text-yellow-500">
+        <div className="text-center font-mono whitespace-nowrap text-yellow-600 dark:text-yellow-500">
           {formatSecondsToTime(val)}
         </div>
       );
@@ -104,7 +106,7 @@ export const columns: ColumnDef<DailyStat>[] = [
   },
   {
     id: "productivity",
-    header: () => <div className="text-right">Productivity</div>,
+    header: () => <div className="text-center">Productivity</div>,
     cell: ({ row }) => {
       const engine = row.original.engineHoursSeconds;
       const move = row.original.moveTimeSeconds;
@@ -112,7 +114,7 @@ export const columns: ColumnDef<DailyStat>[] = [
 
       return (
         <div
-          className={`text-right ${
+          className={`text-center ${
             productivity < 10 ? "text-red-500 font-bold" : ""
           }`}
         >
@@ -124,19 +126,19 @@ export const columns: ColumnDef<DailyStat>[] = [
   {
     accessorKey: "fuelConsumption",
     header: ({ column }) => (
-      <div className="text-right">
+      <div className="flex justify-center">
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Fuel (L)
+          Fuel Consumption (L)
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       </div>
     ),
     cell: ({ row }) => {
       const val = row.getValue("fuelConsumption") as number;
-      return <div className="text-right font-medium">{val.toFixed(2)} L</div>;
+      return <div className="text-center font-medium">{val.toFixed(2)} </div>;
     },
   },
 ];
@@ -165,13 +167,13 @@ export function ReportTable({ data }: ReportTableProps) {
       columnFilters,
     },
     initialState: {
-      pagination: { pageSize: 10 }, // Default to 10 rows
+      pagination: { pageSize: 10 },
     },
   });
 
   if (data.length === 0) return null;
 
-  // Calculate Totals for Footer (Based on ALL data, not just filtered page)
+  // Calculate Totals for Footer
   const totalEngine = data.reduce(
     (acc, curr) => acc + curr.engineHoursSeconds,
     0
@@ -180,7 +182,7 @@ export function ReportTable({ data }: ReportTableProps) {
   const totalFuel = data.reduce((acc, curr) => acc + curr.fuelConsumption, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full">
       {/* Search Input */}
       <div className="flex items-center">
         <div className="relative max-w-sm w-full">
@@ -196,14 +198,14 @@ export function ReportTable({ data }: ReportTableProps) {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border bg-card">
-        <Table>
+      {/* Table Container */}
+      <div className="rounded-md border bg-card w-full overflow-x-auto">
+        <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead key={header.id} className="text-center">
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -223,7 +225,7 @@ export function ReportTable({ data }: ReportTableProps) {
                   data-state={row.getIsSelected() && "selected"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className="text-center">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -247,18 +249,18 @@ export function ReportTable({ data }: ReportTableProps) {
           {/* Footer with Totals */}
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={2} className="font-bold">
+              <TableCell colSpan={2} className="font-bold text-center">
                 Total (All Pages)
               </TableCell>
-              <TableCell className="text-right font-bold font-mono">
+              <TableCell className="text-center font-bold font-mono">
                 {formatSecondsToTime(totalEngine)}
               </TableCell>
-              <TableCell className="text-right font-bold font-mono">
+              <TableCell className="text-center font-bold font-mono">
                 {formatSecondsToTime(totalIdle)}
               </TableCell>
-              <TableCell className="text-right">-</TableCell>
-              <TableCell className="text-right font-bold">
-                {totalFuel.toFixed(2)} L
+              <TableCell className="text-center">-</TableCell>
+              <TableCell className="text-center font-bold">
+                {totalFuel.toFixed(2)}
               </TableCell>
             </TableRow>
           </TableFooter>
