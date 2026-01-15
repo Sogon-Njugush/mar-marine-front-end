@@ -1,8 +1,5 @@
 import UnitsWrapper from "@/components/units-wrapper";
 
-// 1. Force this page to be dynamic (fixes "Dynamic server usage" error)
-export const dynamic = "force-dynamic";
-
 type WialonUnit = {
   id: number;
   name: string;
@@ -24,7 +21,7 @@ export default async function Page() {
 
     // Server-side fetch
     const res = await fetch(`${backendUrl}/api/wialon/units`, {
-      cache: "no-store",
+      cache: "default",
     });
 
     if (res.ok) {
