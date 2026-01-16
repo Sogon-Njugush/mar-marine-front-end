@@ -6,68 +6,58 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ReportFilters } from "@/components/reports/report-filters";
-import { ReportTable, DailyStat } from "@/components/reports/report-table";
-import { processReportData } from "@/lib/utils";
+import { ReportTable, SummaryStat } from "@/components/reports/report-table";
+import { processSummaryData } from "@/lib/utils";
 
 type Unit = { id: number; name: string };
-type Template = {
-  templateId: number;
-  templateName: string;
-  resourceId: number;
-};
 
 export default function Page() {
-  // --- Fleet Analytics State ---
   const [units, setUnits] = useState<Unit[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [reportData, setReportData] = useState<DailyStat[]>([]);
+  const [reportData, setReportData] = useState<SummaryStat | null>(null);
 
-  // 1. Fetch Form Data (Units & Templates)
+  // Default date: Today
+  const today = new Date().toISOString().split("T")[0];
+  const [dateFrom, setDateFrom] = useState<string>(today);
+  const [dateTo, setDateTo] = useState<string>(today);
+
+  // 1. Fetch Form Data (Units)
   useEffect(() => {
     async function loadFormData() {
       try {
         const res = await fetch("/api/proxy/form-data");
         if (!res.ok) throw new Error(`Status: ${res.status}`);
-
         const json = await res.json();
-
-        if (json.data) {
-          setUnits(json.data.units || []);
-          setTemplates(json.data.templates || []);
+        if (json.data && json.data.units) {
+          setUnits(json.data.units);
         }
       } catch (error) {
         console.error("Form Data Error:", error);
-        toast.error("Could not load units/templates.");
+        toast.error("Could not load vehicle list.");
       }
     }
     loadFormData();
   }, []);
 
-  // 2. Generate Report Logic
+  // 2. Generate Report
   const handleGenerate = async () => {
-    if (!selectedUnitId) return;
-
-    if (templates.length === 0) {
-      toast.error("No report templates found.");
+    if (!selectedUnitId || !dateFrom || !dateTo) {
+      toast.error("Please select a unit and date range.");
       return;
     }
 
     setIsLoading(true);
-    setReportData([]);
+    setReportData(null);
 
     try {
-      // Find valid templates. We prefer "Integration" or "Motion", otherwise take the first one.
-      const targetTemplate =
-        templates.find((t) => t.templateName.includes("Integration")) ||
-        templates[0];
-
-      // We explicitly ask for template ID 1 and 3
+      // API Payload matches your request structure
       const payload = {
-        resourceId: targetTemplate.resourceId,
+        resourceId: 29822618,
         templateIds: [1, 3],
         objectId: parseInt(selectedUnitId),
+        from: dateFrom,
+        to: dateTo,
       };
 
       const res = await fetch("/api/proxy/report", {
@@ -78,38 +68,19 @@ export default function Page() {
 
       const json = await res.json();
 
-      if (res.ok && json.data?.tables && json.data.tables.length > 0) {
-        // Find the table named "Engine hours" that contains RAW sensor data
-        const validTable = json.data.tables.find(
-          (t: any) =>
-            t.tableName === "Engine hours" &&
-            t.totalRows > 0 &&
-            t.data[0] &&
-            "fuel_level_begin" in t.data[0]
-        );
+      if (res.ok && json.data?.tables) {
+        // Find unit name
+        const unitName =
+          units.find((u) => u.id.toString() === selectedUnitId)?.name ||
+          "Unknown Unit";
 
-        if (validTable) {
-          const unitName =
-            units.find((u) => u.id.toString() === selectedUnitId)?.name ||
-            "Unknown";
-          const processed = processReportData(validTable.data, unitName);
-          setReportData(processed);
+        // Process the tables to find specific rows
+        const summary = processSummaryData(json.data.tables, unitName);
+        setReportData(summary);
 
-          if (processed.length > 0) {
-            toast.success(`Loaded ${processed.length} daily records`);
-          } else {
-            toast.warning("Data found, but processing returned 0 rows.");
-          }
-        } else {
-          console.warn(
-            "Could not find Detailed Engine Table. Available tables:",
-            json.data.tables
-          );
-          toast.warning("Detailed engine data not found in response.");
-        }
+        toast.success("Report generated successfully");
       } else {
-        const msg = json.message || "Failed to generate report data";
-        console.error("API Error Response:", json);
+        const msg = json.message || "Failed to generate report";
         toast.error(msg);
       }
     } catch (error) {
@@ -135,31 +106,25 @@ export default function Page() {
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-4">
-              {/* Header Section */}
-              <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">
-                  Fleet Analytics
-                </h1>
-                {templates.length > 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    {templates.length} Templates Loaded
-                  </div>
-                )}
-              </div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Fleet Analytics
+              </h1>
 
-              {/* Filters Section */}
               <ReportFilters
                 units={units}
                 selectedUnitId={selectedUnitId}
                 onUnitChange={setSelectedUnitId}
                 onGenerate={handleGenerate}
                 isLoading={isLoading}
+                dateFrom={dateFrom}
+                setDateFrom={setDateFrom}
+                dateTo={dateTo}
+                setDateTo={setDateTo}
               />
 
-              {/* Data Table Section */}
               <div className="space-y-4">
-                {reportData.length > 0 && (
-                  <h2 className="text-xl font-semibold">Daily Breakdown</h2>
+                {reportData && (
+                  <h2 className="text-xl font-semibold">Report Summary</h2>
                 )}
                 <ReportTable data={reportData} />
               </div>

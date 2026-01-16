@@ -5,12 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// --- Report Parsing Helpers ---
+// --- Helpers ---
 
-// Convert "9 days 15:42:02" or "0:16:11" to total seconds
-export const parseDurationToSeconds = (durationStr: string | undefined) => {
+export const parseDurationToSeconds = (
+  durationStr: string | undefined
+): number => {
   if (!durationStr || typeof durationStr !== "string") return 0;
 
+  // Case 1: Decimal Hours (e.g., "98.33")
+  if (!durationStr.includes(":") && !isNaN(parseFloat(durationStr))) {
+    return parseFloat(durationStr) * 3600;
+  }
+
+  // Case 2: Time Format (e.g., "5 days 10:30:05")
   let days = 0;
   let timeStr = durationStr;
 
@@ -21,73 +28,64 @@ export const parseDurationToSeconds = (durationStr: string | undefined) => {
   }
 
   const parts = timeStr.split(":");
-  if (parts.length !== 3) return 0; // Safety check
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts.map(Number);
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  }
 
-  const [hours, minutes, seconds] = parts.map(Number);
-  return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  return 0;
 };
 
-// Convert seconds back to "HH:mm:ss"
-export const formatSecondsToTime = (totalSeconds: number) => {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = Math.floor(totalSeconds % 60);
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s
-    .toString()
-    .padStart(2, "0")}`;
-};
-
-// Parse "664.00 l" to number 664.00
 export const parseFuel = (fuelStr: string | undefined) => {
   if (!fuelStr || typeof fuelStr !== "string") return 0;
   return parseFloat(fuelStr.replace(/[^\d.-]/g, ""));
 };
 
-// Group raw API rows by Date
-export const processReportData = (rows: any[], machineName: string) => {
-  const grouped: Record<string, any> = {};
+// --- Updated Processor ---
+export const processSummaryData = (tables: any[], unitName: string) => {
+  // 1. Get "Engine Hours" (Numerator)
+  const sensorsTable = tables.find(
+    (t: any) => t.tableName === "Digital sensors"
+  );
+  const sensorRow = sensorsTable?.data?.find(
+    (r: any) => r.col_1 === "Total" || r.col_0 === "1"
+  );
+  const engineHoursSeconds = sensorRow
+    ? parseDurationToSeconds(sensorRow.duration)
+    : 0;
 
-  rows.forEach((row) => {
-    // FIX: Skip rows that don't have a valid time string (e.g., Total rows)
-    if (!row.time_begin || typeof row.time_begin !== "string") {
-      return;
-    }
+  // 2. Get "Total Duration", "Fuel", "Avg Fuel"
+  const engineTable = tables.find(
+    (t: any) =>
+      t.tableName === "Engine hours" &&
+      t.data?.some((r: any) => r.col_0 === "Total")
+  );
 
-    // Extract date "16.12.2025" from "16.12.2025 08:06:52"
-    const dateKey = row.time_begin.split(" ")[0];
+  const summaryRow = engineTable?.data?.find((r: any) => r.col_0 === "Total");
 
-    if (!grouped[dateKey]) {
-      grouped[dateKey] = {
-        date: dateKey,
-        machineName: machineName,
-        engineHoursSeconds: 0,
-        idleTimeSeconds: 0,
-        moveTimeSeconds: 0,
-        fuelConsumption: 0,
-      };
-    }
+  const totalDurationSeconds = summaryRow
+    ? parseDurationToSeconds(summaryRow.duration)
+    : 0;
+  const fuelConsumption = summaryRow
+    ? parseFuel(summaryRow.fuel_consumption_all)
+    : 0;
+  const avgFuelConsumption = summaryRow
+    ? parseFuel(summaryRow.avg_fuel_consumption_all)
+    : 0;
 
-    grouped[dateKey].engineHoursSeconds += parseDurationToSeconds(row.duration);
-    grouped[dateKey].idleTimeSeconds += parseDurationToSeconds(
-      row.duration_stay
-    );
-    grouped[dateKey].moveTimeSeconds += parseDurationToSeconds(
-      row.duration_move
-    );
+  // 3. Calculate Idle Hours
+  const idleHoursSeconds = Math.max(
+    0,
+    totalDurationSeconds - engineHoursSeconds
+  );
 
-    const fuelStart = parseFuel(row.fuel_level_begin);
-    const fuelEnd = parseFuel(row.fuel_level_end);
-
-    // Only add positive consumption
-    grouped[dateKey].fuelConsumption += Math.max(0, fuelStart - fuelEnd);
-  });
-
-  return Object.values(grouped).sort((a, b) => {
-    const [d1, m1, y1] = a.date.split(".");
-    const [d2, m2, y2] = b.date.split(".");
-    return (
-      new Date(`${y1}-${m1}-${d1}`).getTime() -
-      new Date(`${y2}-${m2}-${d2}`).getTime()
-    );
-  });
+  return {
+    id: unitName,
+    machineName: unitName,
+    totalDurationSeconds,
+    engineHoursSeconds,
+    idleHoursSeconds, // New Field
+    fuelConsumption,
+    avgFuelConsumption,
+  };
 };
